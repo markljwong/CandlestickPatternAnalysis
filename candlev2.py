@@ -17,6 +17,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.cluster import DBSCAN, OPTICS, cluster_optics_dbscan
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier
 
+# Candle class to hold candle data
 class Candle:
 	def __init__(self, _Trend, _Open, _High, _Low, _Close):
 		self.data = {
@@ -39,6 +40,7 @@ class Candle:
 	def getLowWick(self):
 		return min(self.data['Open'] - self.data['Low'], self.data['Close'] - self.data['Low'])
 
+# Generate new dataframe in the shape necessary for pattern storage depending on number of days in pattern
 def newDataFrame(patternDays):
 	df = pd.DataFrame()
 	df['Trend'] = None
@@ -66,6 +68,7 @@ def newDataFrame(patternDays):
 
 	return df
 
+# Construct a new dataframe and populate it with new data from API
 def newData(ticker):
 	ts = TimeSeries(key=api_key, output_format='pandas')
 	data, meta_data = ts.get_daily(ticker, outputsize='full')
@@ -78,6 +81,7 @@ def newData(ticker):
 
 	return data
 
+# Algorithm for acquiring new patterns from the data
 def acqPatterns(data, patternDays, trainPercentage):
 	procDat = newDataFrame(patternDays)
 
@@ -163,6 +167,7 @@ def acqPatterns(data, patternDays, trainPercentage):
 
 	return procDat
 
+# Cluster data, and display metrics of clustering
 def cluster(data):
 	log.debug('Clustering Data')
 	labels_true = data[['Label']]
@@ -171,8 +176,7 @@ def cluster(data):
 	labels_true = labels_true.to_numpy().flatten()
 	features = features.to_numpy()
 
-	print('-------------------> e, m value: ', e, ', ', m)
-	db = DBSCAN(eps = 0.01*e, min_samples = 5*m).fit(features)
+	db = DBSCAN(eps = 2.0, min_samples = 5).fit(features)
 	core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
 	core_samples_mask[db.core_sample_indices_] = True
 	labels = db.labels_
@@ -181,15 +185,16 @@ def cluster(data):
 	n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0);
 	n_noise_ = list(labels).count(-1)
 
-	print('Estimated number of clusters: %d' % n_clusters_)
-	print('Estimated number of noise points: %d' % n_noise_)
-	print("Homogeneity: %0.3f" % metrics.homogeneity_score(labels_true, labels))
-	print("Completeness: %0.3f" % metrics.completeness_score(labels_true, labels))
-	print("V-measure: %0.3f" % metrics.v_measure_score(labels_true, labels))
-	print("Adjusted Rand Index: %0.3f" % metrics.adjusted_rand_score(labels_true, labels))
-	print("Adjusted Mutual Information: %0.3f" % metrics.adjusted_mutual_info_score(labels_true, labels))
-	# print("Silhouette Coefficient: %0.3f" % metrics.silhouette_score(features, labels))
+	log.info('Estimated number of clusters: %d' % n_clusters_)
+	log.info('Estimated number of noise points: %d' % n_noise_)
+	log.info("Homogeneity: %0.3f" % metrics.homogeneity_score(labels_true, labels))
+	log.info("Completeness: %0.3f" % metrics.completeness_score(labels_true, labels))
+	log.info("V-measure: %0.3f" % metrics.v_measure_score(labels_true, labels))
+	log.info("Adjusted Rand Index: %0.3f" % metrics.adjusted_rand_score(labels_true, labels))
+	log.info("Adjusted Mutual Information: %0.3f" % metrics.adjusted_mutual_info_score(labels_true, labels))
+	log.info("Silhouette Coefficient: %0.3f" % metrics.silhouette_score(features, labels))
 
+# Evaluates Decision Tree accuracy on data, average over number of trials
 def evalDecisionTree(data, maxDepth, trials=1):
 	log.debug('Evaluating Decision Tree Model')
 	labels = data[['Label']]
@@ -216,6 +221,7 @@ def evalDecisionTree(data, maxDepth, trials=1):
 	rate = sum(results) / len(results)
 	return rate, avgtime
 
+# Evaluates Random Forest accuracy on data, average over number of trials
 def evalRandomForest(data, maxDepth=2, min_samples_leaf=2, trials=1):
 	log.debug('Evaluating Random Forest Model')
 	labels = data[['Label']]
@@ -242,6 +248,7 @@ def evalRandomForest(data, maxDepth=2, min_samples_leaf=2, trials=1):
 	rate = sum(results) / len(results)
 	return rate, avgtime
 
+# Evaluates Linear SVM bagged classifier accuracy on data, average over number of trials
 def evalBaggingClassifier(data, n_estimators, trials=1):
 	log.debug('Evaluating Random Forest Model')
 	labels = data[['Label']]
@@ -268,6 +275,7 @@ def evalBaggingClassifier(data, n_estimators, trials=1):
 	rate = sum(results) / len(results)
 	return rate, avgtime
 
+# Evaluates SVM accuracy on data, average over number of trials
 def evalSVM(data, kern, deg=0, trials=1):
 	log.debug('Evaluating SVM Model')
 	labels = data[['Label']]
@@ -296,6 +304,7 @@ def evalSVM(data, kern, deg=0, trials=1):
 	rate = sum(results) / len(results)
 	return rate, avgtime
 
+# Evaluates KNN accuracy on data, average over number of trials
 def evalKNN(data, neighbs, trials=1):
 	log.debug('Evaluating KNN Model')
 	labels = data[['Label']]
@@ -322,6 +331,7 @@ def evalKNN(data, neighbs, trials=1):
 	rate = sum(results) / len(results)
 	return rate
 
+# Evaluates Naive Bayes accuracy on data, average over number of trials
 def evalNB(data, trials=1):
 	log.debug('Evaluating Naive Bayes Model')
 	labels = data[['Label']]
@@ -350,9 +360,9 @@ def evalNB(data, trials=1):
 	rate = sum(results) / len(results)
 	return rate, avgtime
 
+# Algorithims to be tested
 def evalAll(data):
 	# log.info('Decision Tree Depth 5:\t%s', evalDecisionTree(data, 5, 20))
-	log.info('Decision Tree Depth 5:\t%s', evalDecisionTree(data, 10, 20))
 	# log.info('Decision Tree Depth 10:\t%s', evalDecisionTree(data, 10, 20))
 	# log.info('Decision Tree Depth 25:\t%s', evalDecisionTree(data, 25, 20))
 	# log.info('Linear SVM: %s', evalSVM(data, 'linear', 20))
@@ -366,8 +376,12 @@ def evalAll(data):
 	# log.info('KNN 20: %s', evalKNN(data, 20, 20))
 	# log.info('KNN 40: %s', evalKNN(data, 40, 20))
 	# log.info('Gaussian Naive Bayes: %s', evalNB(data, 20))
-	log.info('Random Forest: %s', evalRandomForest(data, 10, 50, 20))
-	# log.info('Random Forest: %s', evalRandomForest(data, 10, 1))
+	# log.info('Random Forest: %s', evalRandomForest(data, 5, 10, 20))
+	# log.info('Random Forest: %s', evalRandomForest(data, 10, 10, 20))
+	# log.info('Random Forest: %s', evalRandomForest(data, 15, 10, 20))
+	# log.info('Random Forest: %s', evalRandomForest(data, 10, 10, 20))
+	# log.info('Random Forest: %s', evalRandomForest(data, 10, 20, 20))
+	# log.info('Random Forest: %s', evalRandomForest(data, 10, 50, 20))
 	# log.info('Bagging Classifier: %s', evalBaggingClassifier(data, 10, 20))
 
 def main(argv):
@@ -378,36 +392,55 @@ def main(argv):
 	consolidate = True
 	patternDays = 3
 	trainPercentage = 0.8
-	# Diversified
-	# tickers = ['PG', 'JNJ', 'MMM', 'BRK-A', 'GOOGL', 'GE', 'DIS', 'DHR', 'HON','BHP', 'V', 'WMT', 'NSRGY', 'KO', 'NEE', 'ENLAY', 
-	# 'XOM', 'CVX', 'AAPL', 'MSFT', 'TSM', 'AMZN', 'TSLA', 'BABA']
-	tickers  = ['MSFT']
+	# Diversified stock tickers
+	tickers = ['PG', 'JNJ', 'MMM', 'BRK-A', 'GOOGL', 'GE', 'DIS', 'DHR', 'HON','BHP', 'V', 'WMT', 'NSRGY', 'KO', 'NEE', 'ENLAY', 
+	'XOM', 'CVX', 'AAPL', 'MSFT', 'TSM', 'AMZN', 'TSLA', 'BABA']
+	# Custom tickers to be editted here comment other line out
+	# tickers  = ['MSFT']
 
 	log.basicConfig(level=log.INFO, format="%(levelname)s: %(message)s")
 
 	# Commandline argument parsing
 	# ====================================================
 	try:
-		opts, args = getopt.getopt(argv, 'ncogd:p:v', ['getNewData', 'consolidated' 'obtNewPattern', 'showgraphs', 'patternDays', 'trainPercentage', 'verbose'])
+		opts, args = getopt.getopt(argv, 'hncogd:p:v', ['help', 'getNewData', 'consolidated' 'obtNewPattern', 'showgraphs', 'patternDays', 'trainPercentage', 'verbose'])
 		for opt, arg in opts:
 			if opt in ('-n', '--getNewData'):
 				getNewData = True
 				obtNewPattern = True
-			if opt in ('-c', '--consolidated'):
+			elif opt in ('-c', '--consolidated'):
 				consolidate = True
-			if opt in ('-o', '--obtNewPattern'):
+			elif opt in ('-o', '--obtNewPattern'):
 				obtNewPattern = True
-			if opt in ('-g', '--showgraphs'):
+			elif opt in ('-g', '--showgraphs'):
 				showGraphs = True
-			if opt in ('-d', '--patternDays'):
+			elif opt in ('-d', '--patternDays'):
 				patternDays = float(arg)
-			if opt in ('-p', '--trainPercentage'):
+			elif opt in ('-p', '--trainPercentage'):
 				trainPercentage = float(arg)
-			if opt in ('-v', '--verbose'):
+			elif opt in ('-v', '--verbose'):
 				log.basicConfig(level=log.DEBUG, format="%(levelname)s: %(message)s")
+			elif opt in ('-h', '--help'):
+				log.info('Usage: python candlev2.py <options>\n' +
+					'-n, --getNewData <t/f> : Retreives new data from Alpha Vantage API or load from local device\n' +
+					'-c, --consolidated <t/f> : Perform training on all data consolidated rather than individual stocks\n' +
+					'-o, --obtNewPattern <t/f> : Obtain new pattern data from algorithim or load from saved pattern data\n' +
+					'-g, --showgraphs <t/f> : Show candlestick graphs of each stock\n' +
+					'-d, --patternDays <days> : Aquire patterns for this length of day\n' +
+					'-p, --trainPercetnage <0-1> : Percentage of data to use for training (rest is testing)\n' +
+					'-v, --verbose <t/f> : Verbose debug mode or just information\n')
+				sys.exit();
 
 	except getopt.GetoptError:
-		log.debug('Incorrect usage')
+		log.warning('Incorrect usage: python candlev2.py <options>\n' +
+			'-n, --getNewData <t/f> : Retreives new data from Alpha Vantage API or load from local device\n' +
+			'-c, --consolidated <t/f> : Perform training on all data consolidated rather than individual stocks\n' +
+			'-o, --obtNewPattern <t/f> : Obtain new pattern data from algorithim or load from saved pattern data\n' +
+			'-g, --showgraphs <t/f> : Show candlestick graphs of each stock\n' +
+			'-d, --patternDays <days> : Aquire patterns for this length of day\n' +
+			'-p, --trainPercetnage <0-1> : Percentage of data to use for training (rest is testing)\n' +
+			'-v, --verbose <t/f> : Verbose debug mode or just highlevel information\n')
+		sys.exit();
 
 	log.info('======================================')
 	log.info('Begin Processing')
@@ -425,7 +458,7 @@ def main(argv):
 		else:
 			try:
 				log.info('Loading Data %s', ticker)
-				raw[ticker] = pd.read_csv(ticker + '_raw.csv')
+				raw[ticker] = pd.read_csv('./raw_data/' + ticker + '_raw.csv')
 			except:
 				log.error('Missing data for: %s (Data not yet retrieved?)', ticker)
 				quit()
@@ -450,13 +483,13 @@ def main(argv):
 		else:
 			try:
 				log.info('Loading Pattern Data for %s', ticker)
-				procDat[ticker] = pd.read_csv(ticker + '_procDat.csv')
+				procDat[ticker] = pd.read_csv('./processed_data/' + ticker + '_procDat.csv')
 			except:
 				log.error('Missing pattern data for: %s (Patterns not processed?)', ticker)
 				quit()
 
 		# Save unique ticker data
-		procDat[ticker].to_csv(ticker + '_procDat.csv', index=False)
+		procDat[ticker].to_csv('./processed_data/' + ticker + '_procDat.csv', index=False)
 
 	# Train and test processed data
 	if consolidate == True:
@@ -464,7 +497,7 @@ def main(argv):
 		for dat in procDat.values():
 			consDat = consDat.append(dat)
 		# Save consolidated data 
-		consDat.to_csv('consolidated_procDat.csv', index=False)
+		consDat.to_csv('./processed_data/consolidated_procDat.csv', index=False)
 
 		# Train consolidated data
 		log.info('======================================')
